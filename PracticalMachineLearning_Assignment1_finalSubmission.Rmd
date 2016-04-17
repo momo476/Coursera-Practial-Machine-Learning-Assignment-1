@@ -1,0 +1,112 @@
+---
+title: "Practical Maching Learning Human Activity Recognition"
+author: "Jessica Fong"
+date: "April 17, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Executive Summary 
+
+The goal of this project was to create a predictive model that is able to determine how well someone is performing an exercise, using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.  Participants were asked to perform barbell lifts 5 different ways, 4 of which are incorrect.
+
+
+
+##Data Extraction
+
+First step is to load the R libraries that will be use during analysis.
+```{r, echo = FALSE, message=FALSE}
+library(dplyr)
+library(caret)
+library(randomForest)
+```
+
+My next step was to extract the data and create data frames for both the training and testing data sets.
+
+```{r}
+trainingcsv <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testingcsv <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+
+dim(trainingcsv)
+dim(testingcsv)
+
+trainingdf <- data.frame(trainingcsv)
+testingdf <- data.frame(testingcsv)
+```
+
+
+##Data Cleaning and Transformation
+
+TI performed most of the same transformations to the testing data set as I did to the training data set. During the data transformation process, I replaced all underscores with periods from column names.  
+
+Next, I removed any empty columns from both the training and testing data sets.
+
+Looking through a summary of all of the columns of data, we see a lot of N/As, blanks, and some #DIV/0! in the data.  It also appears that many of the columns only have data when the column new.window = 'yes'.  There are 19216 rows of no and 406 rows of yes for this column.  The rows with new.window = 'yes' have data populated for some variables that are not populated otherwise.  Looking at the testing data, I noticed that all rows in the new.window column say 'no' and were consequently empty.  Because the testing data did not contain any 'yes' data, I removed all rows where the new.window == 'yes', since this data would not be good predictors for the testing data.
+
+I also removed the first 7 columns from the data set, as these would not be good predictors.
+
+```{r}
+  names(trainingdf) <- gsub("_",".",names(trainingdf))
+  names(testingdf) <- gsub("_",".",names(testingdf))
+  
+  nums <- sapply(trainingdf,is.logical)
+  numsTest <- sapply(testingdf,is.logical)
+  
+  trainingdf2 <- trainingdf[trainingdf$new.window=='no' ,!nums]
+  testingdf2 <- testingdf[testingdf$new.window=='no' ,!nums] ##All rows are no
+
+  trainingdf3 <- trainingdf2[,-(1:7)]
+  testingdf3 <- testingdf2[,-(1:7)]
+```
+
+
+Next, I removed variables with little to no variability, which will be poor predictors.  I am left with 53 variables, including the predictor variable. 
+
+```{r}
+  nsv <- nearZeroVar(trainingdf3)  ##Returns columns with near zero values
+  trainingdfTest <- trainingdf3[,-nsv]
+  
+  nsvTest <- nearZeroVar(testingdf3)  ##Returns columns with near zero values
+  testingdfTest <- testingdf3[,-nsv]
+```
+  
+
+##Model creation and cross validation
+I chose random forest for fitting the predictive model as it is one of the top two models used for prediction.  Random Forest is very accurate; however, it is prone to over fitting.  This is why it is important to break the training data set down even further, into training and testing data sets.  The testing data set will be used to cross validate the model built using the training data set.
+
+
+```{r}  
+
+  set.seed(123456)
+  
+  trainingTrain <-  createDataPartition(trainingdfTest$classe, p = 0.6, list = FALSE)
+  trainingT = trainingdfTest[trainingTrain, ]
+  testingT = trainingdfTest[-trainingTrain, ]
+  modFit <- randomForest(classe~.,data=trainingT, prox=TRUE)
+  confusionMatrix(trainingT$classe,predict(modFit,trainingT ))
+  
+  modFit
+```
+
+
+According to the Random Forest prediction model, the out of sample error rate is expected to be below 1%.  Using the testing data, I cross validate my model.  The accuracy of the model on the test data is very high at 99.52%, so I am confident that the model did not over fit the data and that the model will be a good predictor on the final test set.
+
+```{r}
+  pred <- predict(modFit, testingT)
+  confusionMatrix(testingT$classe,pred)
+```
+
+
+##Quiz Predictions
+```{r}
+  predict(modFit, testingdfTest)
+```
+
+
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
